@@ -39,7 +39,7 @@ pip install -e ".[demo]"  # -i https://pypi.tuna.tsinghua.edu.cn/simple
 ```bash
 cd ../../third_party/GroundingDINO
 # we use `856dde2`
-pip install -e .  # -i https://pypi.tuna.tsinghua.edu.cn/simple
+pip install -e . --no-build-isolation  # -i https://pypi.tuna.tsinghua.edu.cn/simple
 ```
 
 > Install RAM & Tag2Text:
@@ -101,7 +101,7 @@ pip install ipython cmake pybind11 ninja scipy==1.10.1 scikit-learn==1.4.0 panda
 ```bash
 pip install protobuf==3.19.0  # -i https://pypi.tuna.tsinghua.edu.cn/simple
 
-pip install git+https://github.com/pccws/MinkowskiEngine  # -i https://pypi.tuna.tsinghua.edu.cn/simple
+pip install git+https://github.com/pccws/MinkowskiEngine --no-build-isolation # -i https://pypi.tuna.tsinghua.edu.cn/simple
 # if you meet ` No module named 'distutils.msvccompiler` error, use: conda install "setuptools <65" 
 pip install graspnetAPI  # -i https://pypi.tuna.tsinghua.edu.cn/simple
 ```

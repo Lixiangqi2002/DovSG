@@ -30,3 +30,6 @@ data_example/
 *.zip
 
 test.py
+
+ram_gdino_sam2_clip_demo
+ram_gdino_sam2_clip_demo_test

@@ -21,7 +21,7 @@ class RamGroundingDinoSAM2ClipDataset():
         box_threshold: float=0.25,
         text_threshold: float=0.25,
         nms_threshold: float=0.5,
-        device: str="cuda",
+        device: str="cuda:2",
         accumu_classes: bool=False
     ):
         self.device = device
@@ -60,18 +60,44 @@ class RamGroundingDinoSAM2ClipDataset():
         # Also hide "wall" and "floor" for now...
         self.global_classes = set(classes)
 
-        self.add_classes = ["handle", 'Bottled Coke', 'Canned Beer', 'apple', 'potato', 'green toy', 'blue bottle', 'green container', 'blue and grey umbrella', 'blue toy', 'pen', 'orange', 'eggplant', 'yellow bottle', 'corn', 'chili pepper', 'small scissors', 'keys', 'green container', 'cabinet', 'long table', 'big table', 'plate']
+        self.add_classes = [
+            'person',
+            
+            'animal', 
+
+            # 具体物品 - 饮料食物
+            'coffee', 'snack', 
+            
+            # 具体物品 - 容器
+            'bottle', 'cup', 'plate', 'vase', 'bag',
+            
+            # 具体物品 - 工具用品  
+            'phone', 'book', 'clock',
+            
+            # 具体物品 - 玩具
+            'toy',
+            
+            # 家具
+            'table', 'chair', 'bed', 'couch', 'cabinet', 'drawer',
+            
+            # 电器
+            'fridge', 'laptop', 'tv', 'oven', 'microwave', 
+            
+            # 建筑结构
+            'door', 'counter', 
+            
+            # 装饰用品
+            'painting', 'curtain', 'carpet',
+            
+            # 植物
+            'plant'
+        ]
 
         self.remove_classes = [
-            "room", "kitchen", "office", "house", "home", "building", "corner",
-            "shadow", "carpet", "photo", "shade", "stall", "space", "aquarium", 
-            "apartment", "image", "city", "blue", "skylight", "hallway", 
-            "bureau", "modern", "salon", "doorway", "wall lamp", "wood floor",
-            "floor", "ladder", "sink", "counter top", "door", "screen door", "hardwood",
-            "shower curtain", "curtain", "slide", "peak", "closet",
-            "man", "woman", "child", "boy", "girl", "person", "human", "drawer",
-            "food", "vegetable", "fruit"
+            "room",  "home", "building", "kitchen", "office", "house", "corner", "space", "stall", "aquarium", "man", "woman", "child", "boy", "girl", "female", "male", "human", "hallway", "toilet","handbag",  "suitcase",
+            "bureau", "modern", "salon", "doorway", 
         ]
+
         # self.bg_classes = ["wall", "floor", "ceiling"]
         # self.add_classes += self.bg_classes
 
@@ -217,5 +243,87 @@ class RamGroundingDinoSAM2ClipDataset():
         return classes
         
 
-        
+import os
+import glob
+import cv2
+import torch
+import pickle
+import json
+import numpy as np
+from pathlib import Path
+import argparse
 
+def main():
+    parser = argparse.ArgumentParser(description="RAM + GroundingDINO + SAM2 + CLIP Semantic Memory")
+    parser.add_argument("--scene_name", type=str, required=True, 
+                        help="Scene name (e.g., 'bytes-cafe-2019-02-07_0')")
+    parser.add_argument("--img_name", type=str, required=True,
+                        help="Image name (e.g., '000000.jpg' or '/000000.jpg')")
+    parser.add_argument("--device", type=str, default="cuda", 
+                        help="Device to use (default: 'cuda')")
+    parser.add_argument("--box_threshold", type=float, default=0.25,
+                        help="Box threshold for detection (default: 0.25)")
+    parser.add_argument("--text_threshold", type=float, default=0.25,
+                        help="Text threshold for detection (default: 0.25)")
+    parser.add_argument("--nms_threshold", type=float, default=0.5,
+                        help="NMS threshold for detection (default: 0.5)")
+    parser.add_argument("--accumu_classes", action="store_true",
+                        help="Enable accumulative classes across frames")
+    
+    args = parser.parse_args()
+    device = args.device if torch.cuda.is_available() else "cpu"
+    print("Using device:", device)
+
+    memory = RamGroundingDinoSAM2ClipDataset(
+        classes=[],            
+        box_threshold=args.box_threshold,
+        text_threshold=args.text_threshold,
+        nms_threshold=args.nms_threshold,
+        device=device,
+        accumu_classes=args.accumu_classes      
+    )
+
+    img_dir = "/vol/selina/code/dataset/train_dataset_with_activity/images/image_stitched/" + args.scene_name
+    img_paths = sorted(glob.glob(os.path.join(img_dir, "*.jpg")))
+    img_path = img_dir +"/"+ args.img_name
+    print(f"Found {len(img_paths)} images in {img_dir}")
+    # os.mkdir("/vol/selina/code/DovSG/ram_gdino_sam2_clip_demo", exist_ok=True)
+    save_root = Path("/vol/selina/code/DovSG/ram_gdino_sam2_clip_demo_test")
+    save_root.mkdir(parents=True, exist_ok=True) 
+    vis_dir = save_root / "visualizations"
+    det_dir = save_root / "detections"
+    save_root.mkdir(parents=True, exist_ok=True)
+    vis_dir.mkdir(parents=True, exist_ok=True)
+    det_dir.mkdir(parents=True, exist_ok=True)
+
+    # for idx, img_path in enumerate(img_paths):
+    # semantic single frame
+    name = Path(img_path).stem
+    # print(f"[{idx+1}/{len(img_paths)}] processing {name} ...")
+
+    bgr = cv2.imread(img_path)
+    if bgr is None:
+        print(f"  !! failed to read {img_path}, skip")
+        return
+    rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+    with torch.no_grad():
+        det_res, annotated_image, image_pil = memory.semantic_process(image=rgb)
+
+    vis_out = vis_dir / f"{name}.jpg"
+    cv2.imwrite(str(vis_out), cv2.cvtColor(annotated_image, cv2.COLOR_RGB2BGR))
+
+    det_out = det_dir / f"{name}.pkl"
+    with open(det_out, "wb") as f:
+        pickle.dump(det_res, f)
+
+    num_inst = 0 if det_res["class_id"] is None else len(det_res["class_id"])
+    print(f"  -> {num_inst} instances")
+    classes_and_colors = memory.get_classes_and_colors()
+    with open(save_root / "classes_and_colors.json", "w") as f:
+        json.dump(classes_and_colors, f, indent=2)
+    print("Saved classes_and_colors.json with",
+          len(classes_and_colors["classes"]), "classes.")
+
+
+if __name__ == "__main__":
+    main()
